@@ -6,7 +6,6 @@ This script reverses a DeepDiff operation by taking an original JSON file and a 
 to reconstruct the modified JSON file. It applies all the changes from the diff to create
 the target version.
 
-Author: AI Assistant
 Dependencies: None (uses only standard library)
 """
 
@@ -24,14 +23,15 @@ def print_usage() -> None:
     print("Usage: python json_reconstructor.py <original_file.json> <diff_file.json> <output_file.json> [target_file.json]")
     print("\nDescription:")
     print("  Reconstruct a modified JSON file from an original file and a diff export.")
+    print("  The diff export should contain the actual values for all changes.")
     print("\nArguments:")
     print("  original_file.json  - The original, unmodified JSON file")
-    print("  diff_file.json      - The JSON file containing the DeepDiff export")
+    print("  diff_file.json      - The JSON file containing the processed diff export")
     print("  output_file.json    - The output file for the reconstructed JSON")
-    print("  target_file.json    - (Optional) The target file for extracting addition values")
+    print("  target_file.json    - (Optional) The target file for extracting addition values (fallback)")
     print("\nExamples:")
-    print("  python json_reconstructor.py sample1.json diff_export.json reconstructed.json")
-    print("  python json_reconstructor.py sample1.json diff_export.json reconstructed.json sample2.json")
+    print("  python json_reconstructor.py zuora_workflow1.json diff_export.json reconstructed.json")
+    print("  python json_reconstructor.py zuora_workflow1.json diff_export.json reconstructed.json zuora_workflow2.json")
 
 
 def load_json_file(file_path: str) -> Dict[str, Any]:
@@ -213,122 +213,149 @@ def remove_value_at_path(data: Dict[str, Any], path: List[Union[str, int]]) -> N
         raise KeyError(f"Cannot remove value from non-container type")
 
 
-def apply_dictionary_item_added(data: Dict[str, Any], additions: List[str], target_data: Dict[str, Any] = None) -> None:
+def apply_dictionary_item_added(data: Dict[str, Any], additions: List[Dict[str, Any]], target_data: Dict[str, Any] = None) -> None:
     """
     Apply dictionary item additions to the data.
     
     Args:
         data: The data structure to modify
-        additions: List of paths that were added
-        target_data: Optional target data to extract values from
+        additions: List of addition objects with 'path' and 'new_value' keys
+        target_data: Optional target data to extract values from (fallback)
     """
     print("🟢 Applying dictionary item additions...")
-    for path_str in additions:
+    for addition in additions:
         try:
-            if target_data:
-                # Extract the value from the target data
+            path_str = addition['path']
+            new_value = addition['new_value']
+            
+            # Use the new_value from the diff, or fallback to target_data
+            if new_value == "not present" and target_data:
                 path = parse_path(path_str)
-                value = navigate_to_path(target_data, path)
-                set_value_at_path(data, path, value)
-                print(f"  • Added: {path_str}")
-            else:
-                print(f"  ⚠️  Warning: Cannot add {path_str} without target data")
+                new_value = navigate_to_path(target_data, path)
+            
+            path = parse_path(path_str)
+            set_value_at_path(data, path, new_value)
+            print(f"  • Added: {path_str}")
         except Exception as e:
-            print(f"  ⚠️  Warning: Could not apply addition at {path_str}: {e}")
+            print(f"  ⚠️  Warning: Could not apply addition at {addition.get('path', 'unknown')}: {e}")
 
 
-def apply_dictionary_item_removed(data: Dict[str, Any], removals: List[str]) -> None:
+def apply_dictionary_item_removed(data: Dict[str, Any], removals: List[Dict[str, Any]]) -> None:
     """
     Apply dictionary item removals to the data.
     
     Args:
         data: The data structure to modify
-        removals: List of paths that were removed
+        removals: List of removal objects with 'path' key
     """
     print("🔴 Applying dictionary item removals...")
-    for path_str in removals:
+    for removal in removals:
         try:
+            path_str = removal['path']
             path = parse_path(path_str)
             remove_value_at_path(data, path)
             print(f"  • Removed: {path_str}")
         except Exception as e:
-            print(f"  ⚠️  Warning: Could not remove item at {path_str}: {e}")
+            print(f"  ⚠️  Warning: Could not remove item at {removal.get('path', 'unknown')}: {e}")
 
 
-def apply_values_changed(data: Dict[str, Any], changes: Dict[str, Dict[str, Any]]) -> None:
+def apply_values_changed(data: Dict[str, Any], changes: List[Dict[str, Any]]) -> None:
     """
     Apply value changes to the data.
     
     Args:
         data: The data structure to modify
-        changes: Dictionary of path -> {old_value, new_value}
+        changes: List of change objects with 'path', 'old_value', and 'new_value' keys
     """
     print("🟡 Applying value changes...")
-    for path_str, change_info in changes.items():
+    for change in changes:
         try:
+            path_str = change['path']
+            new_value = change['new_value']
             path = parse_path(path_str)
-            new_value = change_info['new_value']
             set_value_at_path(data, path, new_value)
             print(f"  • Changed: {path_str}")
         except Exception as e:
-            print(f"  ⚠️  Warning: Could not change value at {path_str}: {e}")
+            print(f"  ⚠️  Warning: Could not change value at {change.get('path', 'unknown')}: {e}")
 
 
-def apply_type_changes(data: Dict[str, Any], type_changes: Dict[str, Dict[str, Any]]) -> None:
+def apply_type_changes(data: Dict[str, Any], type_changes: List[Dict[str, Any]]) -> None:
     """
     Apply type changes to the data.
     
     Args:
         data: The data structure to modify
-        type_changes: Dictionary of path -> {old_value, new_value, old_type, new_type}
+        type_changes: List of type change objects with 'path', 'old_value', 'new_value', 'old_type', 'new_type' keys
     """
     print("🔄 Applying type changes...")
-    for path_str, change_info in type_changes.items():
+    for change in type_changes:
         try:
+            path_str = change['path']
+            new_value = change['new_value']
             path = parse_path(path_str)
-            new_value = change_info['new_value']
             set_value_at_path(data, path, new_value)
-            print(f"  • Type changed: {path_str} ({change_info.get('old_type', 'unknown')} -> {change_info.get('new_type', 'unknown')})")
+            print(f"  • Type changed: {path_str} ({change.get('old_type', 'unknown')} -> {change.get('new_type', 'unknown')})")
         except Exception as e:
-            print(f"  ⚠️  Warning: Could not apply type change at {path_str}: {e}")
+            print(f"  ⚠️  Warning: Could not apply type change at {change.get('path', 'unknown')}: {e}")
 
 
-def apply_iterable_changes(data: Dict[str, Any], additions: Dict[str, Any], removals: Dict[str, Any]) -> None:
+def apply_iterable_changes(data: Dict[str, Any], additions: List[Dict[str, Any]], removals: List[Dict[str, Any]]) -> None:
     """
     Apply iterable (array) changes to the data.
     
     Args:
         data: The data structure to modify
-        additions: Dictionary of path -> value for array additions
-        removals: Dictionary of path -> value for array removals
+        additions: List of addition objects with 'path' and 'new_value' keys
+        removals: List of removal objects with 'path' and 'old_value' keys
     """
     print("🟢 Applying array additions...")
-    for path_str, value in additions.items():
+    for addition in additions:
         try:
+            path_str = addition['path']
+            new_value = addition['new_value']
             path = parse_path(path_str)
-            # For array additions, we need to append to the list
-            current = navigate_to_path(data, path[:-1])
-            if isinstance(current, list):
-                current.append(value)
-                print(f"  • Added to array: {path_str}")
+            
+            # For array additions, we need to insert at the specific index
+            if len(path) > 0 and isinstance(path[-1], int):
+                # Insert at specific index
+                current = navigate_to_path(data, path[:-1])
+                if isinstance(current, list):
+                    index = path[-1]
+                    # Ensure the list is large enough
+                    while len(current) <= index:
+                        current.append(None)
+                    current[index] = new_value
+                    print(f"  • Added to array at index {index}: {path_str}")
+                else:
+                    print(f"  ⚠️  Warning: Path {path_str} does not point to a list")
             else:
-                print(f"  ⚠️  Warning: Path {path_str} does not point to a list")
+                print(f"  ⚠️  Warning: Invalid array path format: {path_str}")
         except Exception as e:
-            print(f"  ⚠️  Warning: Could not add to array at {path_str}: {e}")
+            print(f"  ⚠️  Warning: Could not add to array at {addition.get('path', 'unknown')}: {e}")
     
     print("🔴 Applying array removals...")
-    for path_str, value in removals.items():
+    for removal in removals:
         try:
+            path_str = removal['path']
+            old_value = removal['old_value']
             path = parse_path(path_str)
+            
             # For array removals, we need to remove from the list
-            current = navigate_to_path(data, path[:-1])
-            if isinstance(current, list) and value in current:
-                current.remove(value)
-                print(f"  • Removed from array: {path_str}")
+            if len(path) > 0 and isinstance(path[-1], int):
+                current = navigate_to_path(data, path[:-1])
+                if isinstance(current, list):
+                    index = path[-1]
+                    if 0 <= index < len(current):
+                        del current[index]
+                        print(f"  • Removed from array at index {index}: {path_str}")
+                    else:
+                        print(f"  ⚠️  Warning: Index {index} out of bounds for {path_str}")
+                else:
+                    print(f"  ⚠️  Warning: Path {path_str} does not point to a list")
             else:
-                print(f"  ⚠️  Warning: Could not remove from array at {path_str}")
+                print(f"  ⚠️  Warning: Invalid array path format: {path_str}")
         except Exception as e:
-            print(f"  ⚠️  Warning: Could not remove from array at {path_str}: {e}")
+            print(f"  ⚠️  Warning: Could not remove from array at {removal.get('path', 'unknown')}: {e}")
 
 
 def reconstruct_json(original_file_path: str, diff_file_path: str, output_file_path: str, target_file_path: str = None) -> None:
