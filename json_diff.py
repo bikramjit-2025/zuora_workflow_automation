@@ -96,12 +96,12 @@ def format_path(path: str) -> str:
     return path if path else "root"
 
 
-def export_diff_to_json(diff: DeepDiff, file1_path: str, file2_path: str) -> None:
+def export_diff_to_json(diff, file1_path: str, file2_path: str) -> None:
     """
     Export the diff object to a JSON file for programmatic access.
     
     Args:
-        diff (DeepDiff): The DeepDiff object containing all differences
+        diff: The DeepDiff object containing all differences (tuple for tree view)
         file1_path (str): Path to the first JSON file
         file2_path (str): Path to the second JSON file
     """
@@ -111,93 +111,56 @@ def export_diff_to_json(diff: DeepDiff, file1_path: str, file2_path: str) -> Non
             "comparison_timestamp": datetime.now().isoformat(),
             "file1": file1_path,
             "file2": file2_path,
-            "has_differences": bool(diff)
+            "view_type": "tree"
         },
         "differences": {}
     }
     
-    # Convert DeepDiff object to a serializable format
-    if diff:
-        # Create a clean, serializable representation of the diff
-        diff_export["differences"] = {}
+    # Handle TreeResult object from DeepDiff tree view
+    if hasattr(diff, '__iter__') and hasattr(diff, 'items'):
+        # Set has_differences flag - check if there are any changes
+        has_changes = any(len(changes) > 0 for changes in diff.values())
+        diff_export["metadata"]["has_differences"] = has_changes
         
-        # Handle dictionary item additions
-        if 'dictionary_item_added' in diff:
-            diff_export["differences"]["dictionary_item_added"] = list(diff['dictionary_item_added'])
-            
-        # Handle dictionary item removals
-        if 'dictionary_item_removed' in diff:
-            diff_export["differences"]["dictionary_item_removed"] = list(diff['dictionary_item_removed'])
-            
-        # Handle value changes
-        if 'values_changed' in diff:
-            diff_export["differences"]["values_changed"] = {}
-            for path, change_info in diff['values_changed'].items():
-                diff_export["differences"]["values_changed"][path] = {
-                    "old_value": change_info['old_value'],
-                    "new_value": change_info['new_value']
+        # Convert TreeResult to a serializable format
+        tree_dict = {}
+        
+        # Handle different types of changes in the tree
+        for change_type, changes in diff.items():
+            tree_dict[change_type] = []
+            for change in changes:
+                # Convert each change to a dictionary, handling NotPresent objects
+                old_value = getattr(change, 't1', None)
+                new_value = getattr(change, 't2', None)
+                
+                # Convert NotPresent objects to a string representation
+                if hasattr(old_value, '__class__') and 'NotPresent' in str(type(old_value)):
+                    old_value = "not present"
+                if hasattr(new_value, '__class__') and 'NotPresent' in str(type(new_value)):
+                    new_value = "not present"
+                
+                change_dict = {
+                    "path": str(change.path()),
+                    "old_value": old_value,
+                    "new_value": new_value
                 }
-                
-        # Handle type changes
-        if 'type_changes' in diff:
-            diff_export["differences"]["type_changes"] = {}
-            for path, change_info in diff['type_changes'].items():
-                diff_export["differences"]["type_changes"][path] = {
-                    "old_value": change_info['old_value'],
-                    "new_value": change_info['new_value'],
-                    "old_type": str(type(change_info['old_value']).__name__),
-                    "new_type": str(type(change_info['new_value']).__name__)
-                }
-                
-        # Handle iterable item additions
-        if 'iterable_item_added' in diff:
-            diff_export["differences"]["iterable_item_added"] = {}
-            for path, value in diff['iterable_item_added'].items():
-                diff_export["differences"]["iterable_item_added"][path] = value
-                
-        # Handle iterable item removals
-        if 'iterable_item_removed' in diff:
-            diff_export["differences"]["iterable_item_removed"] = {}
-            for path, value in diff['iterable_item_removed'].items():
-                diff_export["differences"]["iterable_item_removed"][path] = value
+                tree_dict[change_type].append(change_dict)
+        
+        # Store the tree view structure
+        diff_export["differences"] = tree_dict
         
         # Add summary statistics
+        total_changes = sum(len(changes) for changes in tree_dict.values())
         diff_export["summary"] = {
-            "total_changes": 0,
-            "additions": 0,
-            "deletions": 0,
-            "changes": 0,
-            "type_changes": 0,
-            "array_additions": 0,
-            "array_deletions": 0
+            "total_changes": total_changes,
+            "change_types": {change_type: len(changes) for change_type, changes in tree_dict.items()}
         }
         
-        # Count different types of changes
-        diff_dict = diff_export["differences"]
-        
-        if 'dictionary_item_added' in diff_dict:
-            diff_export["summary"]["additions"] = len(diff_dict['dictionary_item_added'])
-            diff_export["summary"]["total_changes"] += diff_export["summary"]["additions"]
-            
-        if 'dictionary_item_removed' in diff_dict:
-            diff_export["summary"]["deletions"] = len(diff_dict['dictionary_item_removed'])
-            diff_export["summary"]["total_changes"] += diff_export["summary"]["deletions"]
-            
-        if 'values_changed' in diff_dict:
-            diff_export["summary"]["changes"] = len(diff_dict['values_changed'])
-            diff_export["summary"]["total_changes"] += diff_export["summary"]["changes"]
-            
-        if 'type_changes' in diff_dict:
-            diff_export["summary"]["type_changes"] = len(diff_dict['type_changes'])
-            diff_export["summary"]["total_changes"] += diff_export["summary"]["type_changes"]
-            
-        if 'iterable_item_added' in diff_dict:
-            diff_export["summary"]["array_additions"] = len(diff_dict['iterable_item_added'])
-            diff_export["summary"]["total_changes"] += diff_export["summary"]["array_additions"]
-            
-        if 'iterable_item_removed' in diff_dict:
-            diff_export["summary"]["array_deletions"] = len(diff_dict['iterable_item_removed'])
-            diff_export["summary"]["total_changes"] += diff_export["summary"]["array_deletions"]
+    else:
+        # Fallback for unexpected format
+        diff_export["metadata"]["has_differences"] = False
+        diff_export["differences"] = {"error": "Unexpected diff format"}
+        diff_export["summary"] = {"total_changes": 0}
     
     # Write to JSON file
     output_file = "diff_export.json"
@@ -209,101 +172,62 @@ def export_diff_to_json(diff: DeepDiff, file1_path: str, file2_path: str) -> Non
         print(f"⚠️  Warning: Could not export diff to JSON file: {e}")
 
 
-def print_differences(diff: DeepDiff) -> None:
+def print_differences(diff) -> None:
     """
     Print the differences in a structured, human-readable format.
     
     Args:
-        diff (DeepDiff): The DeepDiff object containing all differences
+        diff: The DeepDiff object containing all differences (tuple for tree view)
     """
     print("=" * 80)
-    print("📊 JSON COMPARISON RESULTS")
+    print("📊 JSON COMPARISON RESULTS (TREE VIEW)")
     print("=" * 80)
-    print(diff)
-    print("=" * 80)
-    # Check if there are any differences
-    if not diff:
-        print("✅ No differences found. The JSON files are identical.")
+    
+    # Handle TreeResult object from DeepDiff tree view
+    if hasattr(diff, '__iter__') and hasattr(diff, 'items'):
+        # Check if there are any differences
+        if not diff:
+            print("✅ No differences found. The JSON files are identical.")
+            return
+        
+        # Convert TreeResult to a serializable format
+        tree_dict = {}
+        
+        # Handle different types of changes in the tree
+        for change_type, changes in diff.items():
+            tree_dict[change_type] = []
+            for change in changes:
+                # Convert each change to a dictionary, handling NotPresent objects
+                old_value = getattr(change, 't1', None)
+                new_value = getattr(change, 't2', None)
+                
+                # Convert NotPresent objects to a string representation
+                if hasattr(old_value, '__class__') and 'NotPresent' in str(type(old_value)):
+                    old_value = "not present"
+                if hasattr(new_value, '__class__') and 'NotPresent' in str(type(new_value)):
+                    new_value = "not present"
+                
+                change_dict = {
+                    "path": str(change.path()),
+                    "old_value": old_value,
+                    "new_value": new_value
+                }
+                tree_dict[change_type].append(change_dict)
+        
+        # Display the tree structure
+        print("\n🌳 TREE VIEW STRUCTURE:")
+        print("-" * 60)
+        print(json.dumps(tree_dict, indent=4, sort_keys=True, ensure_ascii=False))
+        print()
+        
+        # Calculate summary
+        total_changes = sum(len(changes) for changes in tree_dict.values())
+        
+    else:
+        # Fallback for unexpected format
+        print("⚠️  Warning: Unexpected tree view format.")
+        print(f"⚠️  Actual type: {type(diff)}")
         return
-    
-    # Track total changes for summary
-    total_changes = 0
-    
-    # Print additions (values added in the second file)
-    if 'dictionary_item_added' in diff:
-        print("\n🟢 ADDITIONS (present in second file, missing in first):")
-        print("-" * 60)
-        for path in diff['dictionary_item_added']:
-            formatted_path = format_path(path)
-            print(f"  • {formatted_path}")
-            total_changes += 1
-    
-    # Print deletions (values removed from the first file)
-    if 'dictionary_item_removed' in diff:
-        print("\n🔴 DELETIONS (present in first file, missing in second):")
-        print("-" * 60)
-        for path in diff['dictionary_item_removed']:
-            formatted_path = format_path(path)
-            print(f"  • {formatted_path}")
-            total_changes += 1
-    
-    # Print value changes
-    if 'values_changed' in diff:
-        print("\n🟡 CHANGES (different values for the same key):")
-        print("-" * 60)
-        for path, change_info in diff['values_changed'].items():
-            formatted_path = format_path(path)
-            old_value = change_info['old_value']
-            new_value = change_info['new_value']
-            
-            # Format values for better readability
-            old_str = json.dumps(old_value, indent=2) if isinstance(old_value, (dict, list)) else repr(old_value)
-            new_str = json.dumps(new_value, indent=2) if isinstance(new_value, (dict, list)) else repr(new_value)
-            
-            print(f"  • {formatted_path}")
-            print(f"    Old: {old_str}")
-            print(f"    New: {new_str}")
-            print()
-            total_changes += 1
-    
-    # Print type changes
-    if 'type_changes' in diff:
-        print("\n🔄 TYPE CHANGES (same key, different data type):")
-        print("-" * 60)
-        for path, change_info in diff['type_changes'].items():
-            formatted_path = format_path(path)
-            old_value = change_info['old_value']
-            new_value = change_info['new_value']
-            old_type = type(old_value).__name__
-            new_type = type(new_value).__name__
-            print(f"  • {formatted_path}")
-            print(f"    Old type: {old_type} ({repr(old_value)})")
-            print(f"    New type: {new_type} ({repr(new_value)})")
-            print()
-            total_changes += 1
-    
-    # Print iterable changes (for lists/arrays)
-    if 'iterable_item_added' in diff:
-        print("\n🟢 ARRAY ADDITIONS (items added to arrays):")
-        print("-" * 60)
-        for path, value in diff['iterable_item_added'].items():
-            formatted_path = format_path(path)
-            value_str = json.dumps(value, indent=2) if isinstance(value, (dict, list)) else repr(value)
-            print(f"  • {formatted_path}")
-            print(f"    Added: {value_str}")
-            print()
-            total_changes += 1
-    
-    if 'iterable_item_removed' in diff:
-        print("\n🔴 ARRAY DELETIONS (items removed from arrays):")
-        print("-" * 60)
-        for path, value in diff['iterable_item_removed'].items():
-            formatted_path = format_path(path)
-            value_str = json.dumps(value, indent=2) if isinstance(value, (dict, list)) else repr(value)
-            print(f"  • {formatted_path}")
-            print(f"    Removed: {value_str}")
-            print()
-            total_changes += 1
     
     # Print summary
     print("=" * 80)
@@ -341,11 +265,14 @@ def compare_json_files(file1_path: str, file2_path: str) -> None:
             exclude_paths=set()  # No paths to exclude
         )
         
+        # Get tree view representation
+        tree_view = diff.tree
+        
         # Display the results
-        print_differences(diff)
+        print_differences(tree_view)
         
         # Export diff to JSON file
-        export_diff_to_json(diff, file1_path, file2_path)
+        export_diff_to_json(tree_view, file1_path, file2_path)
         
     except Exception as e:
         print(f"❌ Error during comparison: {e}")

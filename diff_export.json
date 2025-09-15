@@ -1,92 +1,40 @@
 {
   "metadata": {
-    "comparison_timestamp": "2025-09-14T20:01:28.179989",
+    "comparison_timestamp": "2025-09-15T16:01:34.701529",
     "file1": "zuora_workflow1.json",
     "file2": "zuora_workflow2.json",
+    "view_type": "tree",
     "has_differences": true
   },
   "differences": {
-    "dictionary_item_added": [
-      "root['workflow']['permissions']",
-      "root['workflow']['settings']['logging']",
-      "root['workflow']['settings']['monitoring']"
-    ],
-    "values_changed": {
-      "root['workflow']['version']": {
+    "values_changed": [
+      {
+        "path": "root['workflow']['version']",
         "old_value": "1.0",
         "new_value": "1.1"
       },
-      "root['workflow']['description']": {
+      {
+        "path": "root['workflow']['description']",
         "old_value": "Automated workflow for new customer onboarding process",
         "new_value": "Automated workflow for new customer onboarding process with enhanced features"
       },
-      "root['workflow']['last_modified']": {
+      {
+        "path": "root['workflow']['last_modified']",
         "old_value": "2024-01-15T10:30:00Z",
         "new_value": "2024-01-20T14:45:00Z"
       },
-      "root['workflow']['settings']['retry_attempts']": {
+      {
+        "path": "root['workflow']['settings']['retry_attempts']",
         "old_value": 3,
         "new_value": 5
       },
-      "root['workflow']['settings']['timeout_minutes']": {
+      {
+        "path": "root['workflow']['settings']['timeout_minutes']",
         "old_value": 30,
         "new_value": 45
       },
-      "root['workflow']['steps'][2]": {
-        "old_value": {
-          "step_id": "step_003",
-          "name": "Send Welcome Email",
-          "type": "notification",
-          "order": 3,
-          "config": {
-            "template": "welcome_enterprise",
-            "recipients": [
-              "account_owner",
-              "billing_contact"
-            ]
-          }
-        },
-        "new_value": {
-          "step_id": "step_003",
-          "name": "Send Welcome Email",
-          "type": "notification",
-          "order": 3,
-          "config": {
-            "template": "welcome_enterprise",
-            "recipients": [
-              "account_owner",
-              "billing_contact",
-              "technical_contact"
-            ]
-          }
-        }
-      },
-      "root['workflow']['steps'][1]": {
-        "old_value": {
-          "step_id": "step_002",
-          "name": "Create Subscription",
-          "type": "action",
-          "order": 2,
-          "config": {
-            "product_catalog": "enterprise_plan",
-            "billing_cycle": "monthly",
-            "auto_renew": true
-          }
-        },
-        "new_value": {
-          "step_id": "step_002",
-          "name": "Create Subscription",
-          "type": "action",
-          "order": 2,
-          "config": {
-            "product_catalog": "enterprise_plan",
-            "billing_cycle": "monthly",
-            "auto_renew": true,
-            "proration": true
-          }
-        }
-      },
-      "root['workflow']['steps'][0]": {
+      {
+        "path": "root['workflow']['steps'][0]",
         "old_value": {
           "step_id": "step_001",
           "name": "Validate Account",
@@ -123,54 +71,157 @@
             ]
           }
         }
-      }
-    },
-    "iterable_item_added": {
-      "root['workflow']['triggers'][1]": {
-        "type": "trial_started",
-        "conditions": {
-          "trial_duration": "14_days",
-          "product_tier": "premium"
-        }
       },
-      "root['workflow']['steps'][3]": {
-        "step_id": "step_004",
-        "name": "Setup Integration",
-        "type": "action",
-        "order": 4,
-        "config": {
-          "api_endpoints": [
-            "billing",
-            "usage",
-            "webhooks"
-          ],
-          "authentication": "oauth2",
-          "rate_limits": {
-            "requests_per_minute": 1000,
-            "burst_limit": 2000
+      {
+        "path": "root['workflow']['steps'][2]",
+        "old_value": {
+          "step_id": "step_003",
+          "name": "Send Welcome Email",
+          "type": "notification",
+          "order": 3,
+          "config": {
+            "template": "welcome_enterprise",
+            "recipients": [
+              "account_owner",
+              "billing_contact"
+            ]
+          }
+        },
+        "new_value": {
+          "step_id": "step_003",
+          "name": "Send Welcome Email",
+          "type": "notification",
+          "order": 3,
+          "config": {
+            "template": "welcome_enterprise",
+            "recipients": [
+              "account_owner",
+              "billing_contact",
+              "technical_contact"
+            ]
           }
         }
       },
-      "root['workflow']['steps'][4]": {
-        "step_id": "step_005",
-        "name": "Schedule Follow-up",
-        "type": "scheduler",
-        "order": 5,
-        "config": {
-          "delay_days": 7,
-          "action": "send_check_in_email",
-          "template": "onboarding_followup"
+      {
+        "path": "root['workflow']['steps'][1]",
+        "old_value": {
+          "step_id": "step_002",
+          "name": "Create Subscription",
+          "type": "action",
+          "order": 2,
+          "config": {
+            "product_catalog": "enterprise_plan",
+            "billing_cycle": "monthly",
+            "auto_renew": true
+          }
+        },
+        "new_value": {
+          "step_id": "step_002",
+          "name": "Create Subscription",
+          "type": "action",
+          "order": 2,
+          "config": {
+            "product_catalog": "enterprise_plan",
+            "billing_cycle": "monthly",
+            "auto_renew": true,
+            "proration": true
+          }
         }
       }
-    }
+    ],
+    "iterable_item_added": [
+      {
+        "path": "root['workflow']['triggers'][1]",
+        "old_value": "not present",
+        "new_value": {
+          "type": "trial_started",
+          "conditions": {
+            "trial_duration": "14_days",
+            "product_tier": "premium"
+          }
+        }
+      },
+      {
+        "path": "root['workflow']['steps'][3]",
+        "old_value": "not present",
+        "new_value": {
+          "step_id": "step_004",
+          "name": "Setup Integration",
+          "type": "action",
+          "order": 4,
+          "config": {
+            "api_endpoints": [
+              "billing",
+              "usage",
+              "webhooks"
+            ],
+            "authentication": "oauth2",
+            "rate_limits": {
+              "requests_per_minute": 1000,
+              "burst_limit": 2000
+            }
+          }
+        }
+      },
+      {
+        "path": "root['workflow']['steps'][4]",
+        "old_value": "not present",
+        "new_value": {
+          "step_id": "step_005",
+          "name": "Schedule Follow-up",
+          "type": "scheduler",
+          "order": 5,
+          "config": {
+            "delay_days": 7,
+            "action": "send_check_in_email",
+            "template": "onboarding_followup"
+          }
+        }
+      }
+    ],
+    "dictionary_item_added": [
+      {
+        "path": "root['workflow']['permissions']",
+        "old_value": "not present",
+        "new_value": {
+          "view": [
+            "admin",
+            "sales_manager"
+          ],
+          "edit": [
+            "admin",
+            "workflow_manager"
+          ],
+          "execute": [
+            "system",
+            "api_user"
+          ]
+        }
+      },
+      {
+        "path": "root['workflow']['settings']['logging']",
+        "old_value": "not present",
+        "new_value": {
+          "level": "detailed",
+          "retention_days": 90
+        }
+      },
+      {
+        "path": "root['workflow']['settings']['monitoring']",
+        "old_value": "not present",
+        "new_value": {
+          "alerts_enabled": true,
+          "slack_webhook": "https://hooks.slack.com/services/xxx"
+        }
+      }
+    ]
   },
   "summary": {
     "total_changes": 14,
-    "additions": 3,
-    "deletions": 0,
-    "changes": 8,
-    "type_changes": 0,
-    "array_additions": 3,
-    "array_deletions": 0
+    "change_types": {
+      "values_changed": 8,
+      "iterable_item_added": 3,
+      "dictionary_item_added": 3
+    }
   }
 }
