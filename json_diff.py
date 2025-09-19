@@ -13,6 +13,7 @@ Dependencies: deepdiff (install with: pip install deepdiff)
 import json
 import sys
 import os
+import re
 from typing import Dict, Any, List, Tuple
 from deepdiff import DeepDiff
 from deepdiff.diff import DiffLevel
@@ -30,6 +31,76 @@ def print_usage() -> None:
     print("  python json_diff.py sample1.json sample2.json")
     print("\nDependencies:")
     print("  pip install deepdiff")
+
+
+def remove_excluded_fields(data: Dict[str, Any], excluded_fields: List[str]) -> Dict[str, Any]:
+    """
+    Recursively remove specified fields from JSON data.
+    
+    Args:
+        data: The JSON data to process
+        excluded_fields: List of field names to remove
+        
+    Returns:
+        Dict[str, Any]: JSON data with excluded fields removed
+    """
+    if isinstance(data, dict):
+        return {
+            k: remove_excluded_fields(v, excluded_fields)
+            for k, v in data.items()
+            if k not in excluded_fields
+        }
+    elif isinstance(data, list):
+        return [remove_excluded_fields(item, excluded_fields) for item in data]
+    else:
+        return data
+
+
+def restore_excluded_fields(value: Any, path: str, original_data: Dict[str, Any], excluded_fields: List[str]) -> Any:
+    """
+    Restore excluded fields from original data into the value.
+    
+    Args:
+        value: The current value (potentially missing excluded fields)
+        path: The path to the value in the JSON structure
+        original_data: The original JSON data with all fields
+        excluded_fields: List of field names that were excluded
+        
+    Returns:
+        Any: The value with excluded fields restored
+    """
+    if not isinstance(value, dict) or not original_data:
+        return value
+    
+    # Parse the path to get the location in original data
+    try:
+        # Convert path like "root['tasks'][0]" to access original data
+        path_parts = path.replace("root", "").strip("[]")
+        if not path_parts:
+            return value
+            
+        # Navigate to the location in original data
+        current = original_data
+        for part in path_parts.split("]["):
+            part = part.strip("'\"")
+            if part.isdigit():
+                current = current[int(part)]
+            else:
+                current = current[part]
+        
+        # If current is a dict, restore excluded fields
+        if isinstance(current, dict):
+            restored_value = value.copy()
+            for field in excluded_fields:
+                if field in current:
+                    restored_value[field] = current[field]
+            return restored_value
+            
+    except (KeyError, IndexError, ValueError):
+        # If path parsing fails, return original value
+        pass
+    
+    return value
 
 
 def load_json_file(file_path: str) -> Dict[str, Any]:
@@ -96,7 +167,7 @@ def format_path(path: str) -> str:
     return path if path else "root"
 
 
-def export_diff_to_json(diff, file1_path: str, file2_path: str) -> None:
+def export_diff_to_json(diff, file1_path: str, file2_path: str, json1_original: Dict[str, Any] = None, json2_original: Dict[str, Any] = None) -> None:
     """
     Export the diff object to a JSON file for programmatic access.
     
@@ -217,7 +288,7 @@ def print_differences(diff) -> None:
         # Display the tree structure
         print("\n🌳 TREE VIEW STRUCTURE:")
         print("-" * 60)
-        print(json.dumps(tree_dict, indent=4, sort_keys=True, ensure_ascii=False))
+        #print(json.dumps(tree_dict, indent=4, sort_keys=True, ensure_ascii=False))
         print()
         
         # Calculate summary
@@ -234,8 +305,27 @@ def print_differences(diff) -> None:
     print(f"📈 SUMMARY: {total_changes} total changes found")
     print("=" * 80)
 
+def print_excluded_regex(excluded_paths: dict,json1: dict) -> None:
+    """
+    Print the excluded regex paths.
+    """
+    regex_paths = excluded_paths['excluded_regex_paths']
+    print(f"   Excluded regex paths: {regex_paths}")
+    try:
+        regex_patterns = [re.compile(pattern) for pattern in regex_paths]
+        print(f"   Regex patterns: {regex_patterns}")
+    except re.error as e:
+        print(f"   ❌ Regex compilation error: {e}")
 
-def compare_json_files(file1_path: str, file2_path: str) -> None:
+    for regex in regex_patterns:
+        print(f"   Regex: {regex}")
+        for item in json1:
+            print(f"   Item before regex: {item}")
+            if re.match(regex, item):
+                print(f"   {item}")
+
+
+def compare_json_files(file1_path: str, file2_path: str, exclusion_file_path: str) -> None:
     """
     Compare two JSON files and display the differences.
     
@@ -246,12 +336,21 @@ def compare_json_files(file1_path: str, file2_path: str) -> None:
     print(f"🔍 Comparing JSON files:")
     print(f"   File 1: {file1_path}")
     print(f"   File 2: {file2_path}")
+    print(f"   Exclusion file: {exclusion_file_path}")
     print()
     
     # Load both JSON files
     try:
         json1 = load_json_file(file1_path)
         json2 = load_json_file(file2_path)
+        excluded_paths = load_json_file(exclusion_file_path)
+        #print_excluded_regex(excluded_paths,json1);
+        
+        # Create copies for comparison while keeping originals intact
+        excluded_fields = ['id','task_id','files','created_tags']
+        json1_copy = remove_excluded_fields(json1, excluded_fields)
+        json2_copy = remove_excluded_fields(json2, excluded_fields)
+        
     except Exception:
         # Error handling is done in load_json_file
         return
@@ -259,11 +358,12 @@ def compare_json_files(file1_path: str, file2_path: str) -> None:
     # Perform the comparison using deepdiff
     try:
         diff = DeepDiff(
-            json1, 
-            json2, 
-            ignore_order=True,  # Ignore order in lists for cleaner output
-            exclude_paths=set()  # No paths to exclude
-        )
+            json1_copy, 
+            json2_copy, 
+            ignore_order=True,
+            exclude_paths=excluded_paths["excluded_paths"],
+            exclude_regex_paths=excluded_paths["excluded_regex_paths"],
+        )  
         
         # Get tree view representation
         tree_view = diff.tree
@@ -272,7 +372,7 @@ def compare_json_files(file1_path: str, file2_path: str) -> None:
         print_differences(tree_view)
         
         # Export diff to JSON file
-        export_diff_to_json(tree_view, file1_path, file2_path)
+        export_diff_to_json(tree_view, file1_path, file2_path, json1, json2)
         
     except Exception as e:
         print(f"❌ Error during comparison: {e}")
@@ -284,7 +384,7 @@ def main() -> None:
     Main function to handle command-line arguments and initiate comparison.
     """
     # Check for correct number of arguments
-    if len(sys.argv) != 3:
+    if len(sys.argv) != 4:
         print("❌ Error: Incorrect number of arguments.")
         print()
         print_usage()
@@ -293,16 +393,17 @@ def main() -> None:
     # Extract file paths
     file1_path = sys.argv[1]
     file2_path = sys.argv[2]
+    exclusion_file_path = sys.argv[3]
     
     # Validate that both arguments are provided
-    if not file1_path or not file2_path:
-        print("❌ Error: Both file paths must be provided.")
+    if not file1_path or not file2_path or not exclusion_file_path: 
+        print("❌ Error: All the three file paths must be provided.")
         print()
         print_usage()
         sys.exit(1)
     
     # Perform the comparison
-    compare_json_files(file1_path, file2_path)
+    compare_json_files(file1_path, file2_path,exclusion_file_path)
 
 
 if __name__ == "__main__":

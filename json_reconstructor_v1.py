@@ -7,7 +7,7 @@ It takes a source JSON file, a DeepDiff export, and an exclusion list to create
 a new JSON file with the changes applied while respecting exclusions.
 
 Usage:
-    python json_reconstructor.py <target_data.json> <diff_export.json> <exclusion_list.json>
+    python json_reconstructor.py <original_data.json> <diff_export.json> <exclusion_list.json>
 
 Author: Generated for Zuora Workflow Automation
 """
@@ -20,19 +20,20 @@ import argparse
 from typing import Any, Dict, List, Union, Set
 from pathlib import Path
 
+
 class JSONReconstructor:
     """Handles the reconstruction of JSON files from DeepDiff exports."""
     
-    def __init__(self, target_data: Dict, diff_export: Dict, exclusion_list: Dict):
+    def __init__(self, original_data: Dict, diff_export: Dict, exclusion_list: Dict):
         """
         Initialize the reconstructor with the required data.
         
         Args:
-            target_data: The original JSON data
+            original_data: The original JSON data
             diff_export: The DeepDiff export containing changes
             exclusion_list: The exclusion list with paths to ignore
         """
-        self.target_data = copy.deepcopy(target_data)
+        self.original_data = copy.deepcopy(original_data)
         self.diff_export = diff_export
         self.exclusion_list = exclusion_list
         self.excluded_paths = set(exclusion_list.get('excluded_paths', []))
@@ -170,11 +171,11 @@ class JSONReconstructor:
                 path_keys = self.parse_path(path)
                 new_value = change['new_value']
                 
-                # Check if this is an object-level change that might have excluded fields
-                if self.is_object_level_change(path) and self.has_excluded_object_fields():
-                    new_value = self.apply_selective_object_update(path, new_value)
+                # Check if this is a task-level change that might have excluded fields
+                if self.is_task_level_change(path) and self.has_excluded_task_fields():
+                    new_value = self.apply_selective_task_update(path, new_value)
                 
-                self.set_nested_value(self.target_data, path_keys, new_value)
+                self.set_nested_value(self.original_data, path_keys, new_value)
                 print(f"Applied values_changed: {path}")
             except Exception as e:
                 print(f"Error applying values_changed for {path}: {e}")
@@ -196,7 +197,7 @@ class JSONReconstructor:
             try:
                 path_keys = self.parse_path(path)
                 new_value = change.get('new_value', change.get('value'))
-                self.set_nested_value(self.target_data, path_keys, new_value)
+                self.set_nested_value(self.original_data, path_keys, new_value)
                 print(f"Applied dictionary_item_added: {path}")
             except Exception as e:
                 print(f"Error applying dictionary_item_added for {path}: {e}")
@@ -220,7 +221,7 @@ class JSONReconstructor:
                 parent_keys = path_keys[:-1]
                 key_to_remove = path_keys[-1]
                 
-                parent = self.get_nested_value(self.target_data, parent_keys)
+                parent = self.get_nested_value(self.original_data, parent_keys)
                 if isinstance(parent, dict):
                     del parent[key_to_remove]
                 elif isinstance(parent, list):
@@ -247,7 +248,7 @@ class JSONReconstructor:
             try:
                 path_keys = self.parse_path(path)
                 new_value = change['value']
-                self.set_nested_value(self.target_data, path_keys, new_value)
+                self.set_nested_value(self.original_data, path_keys, new_value)
                 print(f"Applied iterable_item_added: {path}")
             except Exception as e:
                 print(f"Error applying iterable_item_added for {path}: {e}")
@@ -271,7 +272,7 @@ class JSONReconstructor:
                 parent_keys = path_keys[:-1]
                 index_to_remove = path_keys[-1]
                 
-                parent = self.get_nested_value(self.target_data, parent_keys)
+                parent = self.get_nested_value(self.original_data, parent_keys)
                 if isinstance(parent, list):
                     parent.pop(index_to_remove)
                 
@@ -304,51 +305,46 @@ class JSONReconstructor:
         if 'iterable_item_removed' in differences:
             self.apply_iterable_item_removed(differences['iterable_item_removed'])
         
-        return self.target_data
+        return self.original_data
     
-    def is_object_level_change(self, path: str) -> bool:
+    def is_task_level_change(self, path: str) -> bool:
         """
-        Check if the path represents an object-level change (entire object replacement).
+        Check if the path represents a task-level change.
         
         Args:
             path: The path to check
             
         Returns:
-            True if this is an object-level change, False otherwise
+            True if this is a task-level change, False otherwise
         """
-        # Match patterns like root['key'][index] or root['key']['subkey'][index]
-        # This detects when entire objects are being replaced
-        return re.match(r"root\[[^\]]+\]\[\d+\]$", path) is not None
+        return re.match(r"root\['tasks'\]\[\d+\]$", path) is not None
     
-    def has_excluded_object_fields(self) -> bool:
+    def has_excluded_task_fields(self) -> bool:
         """
-        Check if there are any regex patterns that exclude object fields.
+        Check if there are any regex patterns that exclude task fields.
         
         Returns:
-            True if there are object field exclusions, False otherwise
+            True if there are task field exclusions, False otherwise
         """
-        # Check if any regex pattern targets specific fields within objects
         for regex_pattern in self.excluded_regex_paths:
-            # Look for patterns that match field-level exclusions like root['key'][index]['field']
-            # Check if the pattern contains both [digit] and ['field'] structure
-            if "\\[\\d+\\]\\[" in regex_pattern and "\\]" in regex_pattern:
+            if "tasks" in regex_pattern and "id" in regex_pattern:
                 return True
         return False
     
-    def apply_selective_object_update(self, path: str, new_value: Dict) -> Dict:
+    def apply_selective_task_update(self, path: str, new_value: Dict) -> Dict:
         """
-        Apply selective updates to an object, preserving excluded fields.
+        Apply selective updates to a task, preserving excluded fields.
         
         Args:
-            path: The path of the object being updated
-            new_value: The new object value
+            path: The path of the task being updated
+            new_value: The new task value
             
         Returns:
-            The selectively updated object value
+            The selectively updated task value
         """
-        # Get the current object value
+        # Get the current task value
         path_keys = self.parse_path(path)
-        current_value = self.get_nested_value(self.target_data, path_keys)
+        current_value = self.get_nested_value(self.original_data, path_keys)
         
         # Create a copy of the new value
         updated_value = copy.deepcopy(new_value)
@@ -419,31 +415,33 @@ Examples:
         """
     )
     
-    parser.add_argument('target_data', help='Path to the target JSON file')
+    parser.add_argument('original_data', help='Path to the original JSON file')
     parser.add_argument('diff_export', help='Path to the DeepDiff export JSON file')
     parser.add_argument('exclusion_list', help='Path to the exclusion list JSON file')
     parser.add_argument('-o', '--output', default='reconstructed.json',
                        help='Output file path (default: reconstructed.json)')
     parser.add_argument('-v', '--verbose', action='store_true',
                        help='Enable verbose output')
-    
-    args = parser.parse_args()
+    original_data = "samplefile1.json"
+    diff_export = "diff_export.json"
+    exclusion_list = "exclusion_list.json"
+    args = parser.parse_args(original_data, diff_export, exclusion_list)
     
     try:
         # Load input files
         print("Loading input files...")
-        target_data = load_json_file(args.target_data)
+        original_data = load_json_file(args.original_data)
         diff_export = load_json_file(args.diff_export)
         exclusion_list = load_json_file(args.exclusion_list)
         
         if args.verbose:
-            print(f"Target data keys: {list(target_data.keys())}")
+            print(f"Original data keys: {list(original_data.keys())}")
             print(f"Diff export keys: {list(diff_export.keys())}")
             print(f"Exclusion list: {exclusion_list}")
         
         # Create reconstructor and apply changes
-        print("Reconstructing JSON...")
-        reconstructor = JSONReconstructor(target_data, diff_export, exclusion_list)
+        print("Reconstructing JSON...") #original data is sa
+        reconstructor = JSONReconstructor(original_data, diff_export, exclusion_list)
         reconstructed_data = reconstructor.reconstruct()
         
         # Save the reconstructed data

@@ -1,0 +1,22 @@
+{ "initial_definition": {
+    "name": "test1",
+    "description": "test"
+  }, 
+  "tasks": [
+    {
+      "id": 312312312312,
+      "parameters": {
+        "created_tags": [],
+        "LambdaFunction": "testing4567"
+      },
+      "task_id": 3123123124123
+    },      
+    {
+        "id": 99122312134,
+        "parameters": {
+          "LambdaFunction": "testing345234243"
+        },
+        "task_id": 123123123
+      }
+    ]
+}

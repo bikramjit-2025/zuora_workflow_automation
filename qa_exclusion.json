@@ -1,0 +1,12 @@
+{ 
+    "excluded_paths" : [
+        "root['linkages']",
+        "root['workflow']['id']",
+        "root['workflow']['version']"],
+
+        "excluded_regex_paths": [
+             ".*\\['id'\\]",
+             ".*\\['files'\\]",
+             ".*\\['task_id'\\]",
+             ".*\\['created_tags'\\]"]
+}
