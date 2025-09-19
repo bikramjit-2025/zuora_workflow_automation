@@ -15,6 +15,7 @@ import sys
 import os
 from typing import Dict, Any
 from datetime import datetime
+from deepdiff import DeepDiff
 
 def print_usage() -> None:
     """
